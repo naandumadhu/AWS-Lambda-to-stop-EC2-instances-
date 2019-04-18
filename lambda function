@@ -1,0 +1,133 @@
+import boto3
+import logging
+
+ec2global = boto3.client('ec2')
+
+def lambda_handler(event, context):
+    global ec2global
+    instance_list = []
+    regionslist = ec2global.describe_regions().get('Regions', [])
+
+    for region in regionslist:
+        
+        print("Looking at region %s " % region['RegionName'])
+        print("\n")
+        reg = region['RegionName']
+
+        ec2r = boto3.resource('ec2', region_name=reg)
+        print("List of Available Instances::")
+        print("\n")
+        all_running_instances = [i for i in
+                                 ec2r.instances.filter(Filters=[{'Name': 'instance-state-name', 'Values': ['*']}])]
+		                          
+        for instance in all_running_instances:
+            print( instance.id)
+			
+
+        instances = [i for i in ec2r.instances.filter(Filters=[
+                                                               {'Name': 'tag:BusinessUnit',
+                                                                'Values': ['*']},
+                                                               {'Name': 'tag:ApplicationId',
+                                                                'Values': ['*']},
+                                                               {'Name': 'tag:OwnerSSO',
+                                                                'Values': ['*']},
+															   {'Name': 'tag:aws:autoscaling:groupName',
+                                                                'Values': ['*']}
+                                                              
+                                                             ])]
+                                                             
+        print("List of Instance with Specific Tags")
+        print("\n")
+        for instance in instances:
+            
+            print(instance.id)
+            print("\n")
+        print("List of Instance without Specific Tags")
+        
+        instances_to_ShutDown = [to_shutdown for to_shutdown in all_running_instances if to_shutdown.id not in [i.id for i in instances]]
+              
+        for instance in instances_to_ShutDown:
+            
+            print(instance.id)
+            instance_list.append(instance.id)
+			
+        client = boto3.client('autoscaling')
+    
+        ec2 = boto3.resource('ec2', region_name=reg)
+       
+        response = client.describe_auto_scaling_groups()
+        paginator = client.get_paginator('describe_auto_scaling_groups')
+        groups = paginator.paginate().build_full_result()
+        autoscaling_list = []
+        Ec2Instance_list = []
+
+        for asg in groups['AutoScalingGroups']:
+            autoscaling_list.append(asg['AutoScalingGroupName'])
+        
+            for asginstance in autoscaling_list:
+	            print(asginstance)
+	    
+            for instance in asg['Instances']:
+                print(instance['InstanceId'])
+                for instance1 in instances_to_ShutDown:
+                
+                    if(instance1.id == instance['InstanceId'] ):
+                       print("===========")
+                       print(instance['InstanceId'] +"    "+ asginstance)
+                       response = client.delete_auto_scaling_group(
+					    					AutoScalingGroupName=asginstance,
+					    					ForceDelete=True
+										)
+                       print ("Deleting AutoScalingGroup")
+                   
+    for region in regionslist:
+        
+        print("Looking at region %s " % region['RegionName'])
+        print("\n")
+        reg = region['RegionName']
+        ec2= boto3.client('ec2',region_name=reg)
+        ec2r = boto3.resource('ec2', region_name=reg)
+        print("List of Available Instances::")
+        print("\n")
+        all_running_instances = [i for i in
+                                 ec2r.instances.filter(Filters=[{'Name': 'instance-state-name', 'Values': ['running']}])]
+		                          
+        for instance in all_running_instances:
+            print( instance.id)
+			
+
+        instances = [i for i in ec2r.instances.filter(Filters=[
+                                                               {'Name': 'tag:BusinessUnit',
+                                                                'Values': ['*']},
+                                                               {'Name': 'tag:ApplicationId',
+                                                                'Values': ['*']},
+                                                               {'Name': 'tag:OwnerSSO',
+                                                                'Values': ['*']}
+                                                              
+                                                             ])]
+                                                             
+        print("List of Instance with Specific Tags")
+        print("\n")
+        for instance in instances:
+            
+            print(instance.id)
+            print("\n")
+        print("List of Instance without Specific Tags")
+        
+        instances_to_ShutDown = [to_shutdown for to_shutdown in all_running_instances if to_shutdown.id not in [i.id for i in instances]]
+            
+        for instance in instances_to_ShutDown:
+            
+            print(instance.id)
+        
+    
+        RunningInstances = [instance.id for instance in instances_to_ShutDown]
+          
+        if len(RunningInstances) > 0:
+       
+           shuttingDown = ec2r.instances.filter(InstanceIds=RunningInstances).stop()
+           print (shuttingDown)
+        else:
+           print ("Nothing to see here")               
+                   
+                   
